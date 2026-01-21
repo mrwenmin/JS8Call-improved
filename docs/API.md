@@ -61,6 +61,7 @@ The ID number is the epoch time of 1499299200000 (July 6, 2017) plus current epo
 | Response |
 |----------|
 |{"params":{"_ID":"269558031750"},"type":"API.ERROR","value":"unterminated object: json parsing error"}|
+
 ``value`` contains the error
 
 
@@ -107,10 +108,12 @@ Sets radio dial and offset frequencies
 |--------------|-|
 | dial         | Frequency in Hz |
 | offset       | Offset in Hz    |
+| value        | empty string    |
 
 | Response |
 |----------|
 | {"params":{"DIAL":7078000,"FREQ":7079950,"OFFSET":1950,"SELECTED":"","SPEED":0,"_ID":"269554221645"},"type":"STATION.STATUS","value":""} |
+
 ``FREQ`` is the ``DIAL`` frequency plus ``OFFSET``
 ``SPEED`` is one of the ``MODE`` speeds
 
@@ -162,6 +165,7 @@ Sets station grid square
 | Response |
 |----------|
 |{"params":{"_ID":269558371794},"type":"STATION.GRID","value":"EM85"}|
+
 Grid square is returned in `value`
 
 # STATION.GET_INFO
@@ -178,6 +182,7 @@ Gets station info
 | Response |
 |----------|
 |{"params":{"_ID":269559398161},"type":"STATION.INFO","value":"JS8-IMPROVED VER <MYVERSION>"}|
+
 Station info is returned in `value`
 
 # STATION.SET_INFO
@@ -194,6 +199,7 @@ Sets station info
 | Response |
 |----------|
 |{"params":{"_ID":269559620289},"type":"STATION.INFO","value":"JS8-IMPROVED VER <MYVERSION>"}|
+
 Station info is returned in `value`
 
 
@@ -210,6 +216,7 @@ Gets station status message
 | Response |
 |----------|
 |{"params":{"_ID":269559773383},"type":"STATION.STATUS","value":"IDLE <MYIDLE> JS8CALL-IMPORVED VERSION <MYVERSION>"}|
+
 Station status is returned in `value`
 
 
@@ -227,6 +234,7 @@ Sets station status message
 | Response |
 |----------|
 |{"params":{"_ID":269559773383},"type":"STATION.STATUS","value":"IDLE <MYIDLE> JS8CALL-IMPORVED VERSION <MYVERSION>"}|
+
 Station status is returned in `value`
 
 
@@ -243,7 +251,7 @@ Returns the recent call activity
 
 | Response |
 |----------|
-|{"params":{"":{"GRID":"","SNR":0,"UTC":0},"AB4WV":{"GRID":"","SNR":-18,"UTC":1768858992167},"AC4TC":{"GRID":" EM63","SNR":-8,"UTC":1768858257702},"K3XV":{"GRID":"FM19","SNR":-10,"UTC":1768857551924},"K4EXA":{"GRID":"EM63","SNR":-18,"UTC":1768858242147},"type":"RX.CALL_ACTIVITY","value":""}|
+|{"params":{"":{"GRID":"","SNR":0,"UTC":0},"AB4WV":{"GRID":"","SNR":-18,"UTC":1768858992167},"K4EXA":{"GRID":"EM63","SNR":-18,"UTC":1768858242147},"type":"RX.CALL_ACTIVITY","value":""}|
 
 
 # RX.GET_CALL_SELECTED
@@ -261,6 +269,7 @@ Returns the callsign of a station that has been selected in the UI.
 |----------|
 |{"params":{"_ID":269560590229},"type":"RX.CALL_SELECTED","value":""}|
 |{"params":{"_ID":269560649847},"type":"RX.CALL_SELECTED","value":"KM4PVB"}|
+
 1) First form is if no callsign is currently selected in the UI.
 2) Second form is the selected callsign in the UI.
 
@@ -312,6 +321,7 @@ Gets the text to be transmitted
 |----------|
 |{"params":{"_ID":269562593590},"type":"TX.TEXT","value":""}|
 |{"params":{"_ID":269562644567},"type":"TX.TEXT","value":"KJ4CTD: KJ4YQK  SOME RANDOM TEXT"}|
+
 1) If text box is empty
 2) If text box has something in it
 
@@ -352,6 +362,7 @@ Sends the value in the next transmit cycle
 |{"params":{"PTT":true,"UTC":1768862894801,"_ID":-1},"type":"RIG.PTT","value":"on"}|
 |{"params":{"TONES":[4,2,5,6,1,3,0,2,3,7,1,3,7,7,5,2,2,4,1,1,2,2,1,1,5,3,5,4,0,7,0,5,2,1,6,5,4,2,5,6,1,3,0,7,1,6,4,4,3,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,2,6,7,1,2,4,2,5,6,1,3,0],"_ID":-1},"type":"TX.FRAME","value":""}|
 |{"params":{"PTT":false,"UTC":1768862908402,"_ID":-1},"type":"RIG.PTT","value":"off"}|
+
 1) Trigger PTT on
 2) Send the message tones
 3) Trigger PTT off
@@ -421,7 +432,6 @@ Fetches all Inbox messages, warning, this could be very large
 |----------|
 |{"params":{"MESSAGES":[{"params":{"CMD":" MSG ","DIAL":7078000,"FREQ":7080318,"FROM":"KJ5MIW","GRID":" EM15","OFFSET":2318,"PATH":"KJ5MIW","SNR":-15,"SUBMODE":0,"TDRIFT":0.13999998569488525,"TEXT":"F!104 100 ST[OK] GR[EM15] #ATTV","TO":"@SITREP","UTC":"2026-01-21 01:44:26","_ID":"269660742003"},"type":"READ","value":""}],"_ID":269699597005},"type":"INBOX.MESSAGES","value":""}|
 
-This is an example of a @SITREP message stored on my station and breaks down as follows.
 ``MESSAGES`` is a comma seperated list of message records, each record is contained within brackets.
 
 
