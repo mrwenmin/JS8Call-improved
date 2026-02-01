@@ -1,6 +1,6 @@
-# JS8Call API Documentation v2.5.0
+# JS8Call API Documentation v2.6.0
 
-This document provides documention of the API to control JS8Call through version 2.5.0.
+This document provides documention of the API to control JS8Call.
 
 # Methods
 The API is normally located on localhost port 2242, but can be changed at ``Settings -> Reporting Tab -> API``
