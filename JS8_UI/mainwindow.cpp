@@ -4183,7 +4183,7 @@ void UI_Constructor::buildFrequencyMenu(QMenu *menu) {
 
     auto frequencies = m_config.frequencies()->frequency_list();
     std::sort(frequencies.begin(), frequencies.end(),
-              [](FrequencyList_v2::Item &a, FrequencyList_v2::Item &b) {
+              [](FrequencyList_v3::Item &a, FrequencyList_v3::Item &b) {
                   return a.frequency_ < b.frequency_;
               });
 
@@ -4191,11 +4191,15 @@ void UI_Constructor::buildFrequencyMenu(QMenu *menu) {
         auto freq = Radio::pretty_frequency_MHz_string(f.frequency_);
         auto const &band = m_config.bands()->find(f.frequency_);
 
+        QString description = (f.description_.isEmpty()) ? ""
+            : QString(" - %1").arg(f.description_);
+
         auto a =
-            menu->addAction(QString("%1:%2%2%3 MHz")
+            menu->addAction(QString("%1:%2%2%3 MHz%4")
                                 .arg(band)
                                 .arg(QString(" ").repeated(5 - band.length()))
-                                .arg(freq));
+                                .arg(freq)
+                                .arg(description));
         connect(a, &QAction::triggered, this,
                 [this, f]() { setRig(f.frequency_); });
     }
