@@ -21,8 +21,6 @@ class SoundInput : public QObject {
 
     ~SoundInput();
 
-    static bool canOpenAsInput(const QAudioDevice &dev);
-
     // sink must exist from the start call until the next start call or
     // stop call
     Q_SLOT void start(QAudioDevice const &, int framesPerBuffer,
