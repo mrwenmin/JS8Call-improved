@@ -175,6 +175,8 @@ void UI_Constructor::networkMessage(Message const &message) {
     // STATION.SEND_HB - Send heartbeat immediately
     // STATION.SET_AUTOREPLY_CONFIRMATION - Toggle autoreply confirmation via TCP
     // STATION.AUTOREPLY_CONFIRM_RESPONSE - Accept/reject pending autoreply
+    // STATION.SET_GROUPS - Replace subscribed groups list
+    // STATION.SET_AVOID_ALLCALL - Toggle @ALLCALL opt-out
     /**
      * @name STATION Commands
      * STATION related API calls
@@ -309,6 +311,10 @@ if(type == "STATION.SET_SPOT") {
     /** @brief STATION.GET_CONFIG: Returns all mode/config states for remote control.
      *  @note API 2.6+ */
     if (type == "STATION.GET_CONFIG") {
+        QVariantList groupsList;
+        for (auto const &g : m_config.my_groups()) {
+            groupsList.append(g);
+        }
         sendNetworkMessage("STATION.CONFIG", "", {
             {"_ID", id},
             {"AUTO_REPLY", QVariant(ui->actionModeAutoreply->isChecked())},
@@ -322,6 +328,8 @@ if(type == "STATION.SET_SPOT") {
             {"SPEED", QVariant(m_nSubMode)},
             {"CAN_HB", QVariant(canCurrentModeSendHeartbeat())},
             {"AUTOREPLY_CONFIRMATION", QVariant(m_config.autoreply_confirmation())},
+            {"MY_GROUPS", QVariant(groupsList)},
+            {"AVOID_ALLCALL", QVariant(m_config.avoid_allcall())},
         });
         return;
     }
@@ -443,6 +451,59 @@ if(type == "STATION.SET_SPOT") {
                      {"ACCEPTED", QVariant(accepted)},
                      {"MESSAGE", QVariant(pc.message)}});
             }
+        });
+        return;
+    }
+
+    /** @brief STATION.SET_GROUPS: Replace the subscribed groups list via TCP.
+     *  Validates each group (isGroupAllowed + isCompoundCallsign) and returns
+     *  a TCP error instead of opening a MessageBox (headless-safe).
+     *  @note API 2.6+ */
+    if (type == "STATION.SET_GROUPS") {
+        QStringList newGroups;
+        auto groupsVar = message.params().value("GROUPS");
+        if (groupsVar.canConvert<QVariantList>()) {
+            for (auto const &v : groupsVar.toList()) {
+                auto g = v.toString().trimmed();
+                if (g.isEmpty() || !g.startsWith("@")) continue;
+                if (!Varicode::isGroupAllowed(g)) {
+                    sendNetworkMessage("STATION.SET_GROUPS", "", {
+                        {"_ID", id},
+                        {"ERROR", QString("Group not allowed: %1").arg(g)},
+                    });
+                    return;
+                }
+                if (!Varicode::isCompoundCallsign(g)) {
+                    sendNetworkMessage("STATION.SET_GROUPS", "", {
+                        {"_ID", id},
+                        {"ERROR", QString("Invalid group name: %1").arg(g)},
+                    });
+                    return;
+                }
+                newGroups.append(g);
+            }
+        }
+        m_config.setMyGroups(newGroups);
+
+        QVariantList result;
+        for (auto const &g : m_config.my_groups()) {
+            result.append(g);
+        }
+        sendNetworkMessage("STATION.SET_GROUPS", "", {
+            {"_ID", id},
+            {"GROUPS", QVariant(result)},
+        });
+        return;
+    }
+
+    /** @brief STATION.SET_AVOID_ALLCALL: Toggle @ALLCALL opt-out via TCP.
+     *  @note API 2.6+ */
+    if (type == "STATION.SET_AVOID_ALLCALL") {
+        auto checked = QVariant(message.value()).toBool();
+        m_config.set_avoid_allcall(checked);
+        sendNetworkMessage("STATION.SET_AVOID_ALLCALL", "", {
+            {"_ID", id},
+            {"AVOID_ALLCALL", QVariant(m_config.avoid_allcall())},
         });
         return;
     }
