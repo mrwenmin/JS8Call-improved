@@ -11,7 +11,7 @@
 </table>
 **This is a partially updated version of the v2.2 User Guide.  Links have been fixed/updated so it is slightly more useful than the v2.2 original**
 <hr>
-To save an offline copy of the User Guide as PDF [download from here] (https://js8call-improved.github.io/downloads/JS8Call_User_Guide.pdf)
+To save an offline copy of the User Guide as PDF [download from here](https://js8call-improved.github.io/downloads/JS8Call_User_Guide.pdf)
 <hr>
  JS8Call is an experiment in combining the robustness of FT8 (a weak-signal mode by K1JT) with a messaging and network protocol layer for weak signal *communication*. The open source software is designed for connecting amateur radio operators who are operating under weak signal conditions and offers real-time keyboard-to-keyboard messaging, stored (inbox) messaging, message relay, and automatic station announcements. JS8Call is heavily inspired by [WSJT-X](https://wsjt.sourceforge.io/wsjtx.html), [Fldigi](http://www.w1hkj.org/), and [FSQCall](http://www.qsl.net/zl1bpu/MFSK/FSQweb.htm) and would not exist without the hard work and dedication of the many developers in the amateur radio community.
 
