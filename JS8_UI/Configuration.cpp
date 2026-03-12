@@ -158,15 +158,19 @@
 #include <QApplication>
 #include <QAudioDevice>
 #include <QAudioInput>
+#include <QClipboard>
 #include <QColorDialog>
+#include <QDateTime>
 #include <QDateTimeEdit>
 #include <QDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontDialog>
 #include <QFormLayout>
 #include <QIntValidator>
+#include <QLibraryInfo>
 #include <QLineEdit>
 #include <QList>
 #include <QLoggingCategory>
@@ -184,7 +188,9 @@
 #include <QString>
 #include <QStringList>
 #include <QStringListModel>
+#include <QSysInfo>
 #include <QTemporaryFile>
+#include <QTextStream>
 #include <QThread>
 #include <QTimeZone>
 #include <QTimer>
@@ -393,13 +399,38 @@ class Configuration::impl final : public QDialog {
   private:
     typedef QList<QAudioDevice> AudioDevices;
 
+
+    struct AudioBinding
+    {
+        QAudioDevice::Mode mode;
+        QComboBox* device_combo = nullptr;
+        QComboBox* channel_combo = nullptr;   // nullptr for notifications (no channel UI)
+        bool allow_both = false;              // true for output, false for input
+        bool allow_monitor_inputs = false;    // only relevant for input on Linux
+
+        // Settings keys
+        const char* key_id = nullptr;
+        const char* key_name = nullptr;       // legacy/migration hint
+        const char* key_channel = nullptr;    // nullptr for notifications
+    };
+
     void read_settings();
     void write_settings();
 
     void find_audio_devices();
-    QAudioDevice find_audio_device(QAudioDevice::Mode, QComboBox *,
-                                   QString const &device_name);
-    void load_audio_devices(QAudioDevice::Mode, QComboBox *, QAudioDevice *);
+    void resolve_audio_binding(AudioBinding const& b,
+                                                QAudioDevice& next_device,
+                                                AudioDevice::Channel* next_channel);
+
+    QAudioDevice find_audio_device(QAudioDevice::Mode mode,
+                               QComboBox *combo_box,
+                               QString const& saved_id,
+                               QString const& saved_name,
+                               bool allow_monitors);
+    void load_audio_devices(QAudioDevice::Mode mode,
+                        QComboBox *combo_box,
+                        QAudioDevice *device,
+                        bool show_monitors = true);
     void update_audio_channels(QComboBox const *, QComboBox const *, int, bool);
     void load_network_interfaces(CheckableItemComboBox *, QStringList current);
 
@@ -407,6 +438,19 @@ class Configuration::impl final : public QDialog {
         QLineEdit *edit, const QString &toolTip = QStringLiteral("Required"));
 
     QStringList get_selected_network_interfaces(CheckableItemComboBox *);
+    static QString dev_id(QAudioDevice const &d);
+    static bool is_monitor(QAudioDevice const &d);
+    static bool looks_like_capture(QAudioDevice const &d);
+    static QString id_tail(QAudioDevice const &d);
+    static QString make_label(QString const &base, QAudioDevice const &d,
+                              int dupCount);
+    void run_diagnostics();
+    QString build_diagnostics_text() const;
+    static QString run_cmd(QString const &program, QStringList const &args,
+                    int timeout_ms);
+    static void append_env(QTextStream &ts, char const *key);
+    static QString dump_devices(QString const &title,
+                                QList<QAudioDevice> const &devices);
 
     void find_tab(QWidget *);
 
@@ -1311,44 +1355,65 @@ Configuration::impl::impl(Configuration *self, QDir const &temp_directory,
         [this]() {
             QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
 
-            load_audio_devices(QAudioDevice::Input, ui_->sound_input_combo_box,
-                               &next_audio_input_device_);
-            update_audio_channels(
-                ui_->sound_input_combo_box, ui_->sound_input_channel_combo_box,
-                ui_->sound_input_combo_box->currentIndex(), false);
-            ui_->sound_input_channel_combo_box->setCurrentIndex(
-                next_audio_input_channel_);
+            const bool show_monitors =
+                settings_->value("AllowMonitorInputs", true).toBool();
+
+            load_audio_devices(QAudioDevice::Input,
+                               ui_->sound_input_combo_box,
+                               &next_audio_input_device_,
+                               show_monitors);
+
+            update_audio_channels(ui_->sound_input_combo_box,
+                                  ui_->sound_input_channel_combo_box,
+                                  ui_->sound_input_combo_box->currentIndex(),
+                                  false);
+
+            ui_->sound_input_channel_combo_box->setCurrentIndex(next_audio_input_channel_);
 
             QGuiApplication::restoreOverrideCursor();
         });
 
     connect(ui_->sound_output_combo_box, &LazyFillComboBox::about_to_show_popup,
-            [this]() {
-                QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
+        [this]() {
+            QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
 
-                load_audio_devices(QAudioDevice::Output,
-                                   ui_->sound_output_combo_box,
-                                   &next_audio_output_device_);
-                update_audio_channels(
-                    ui_->sound_output_combo_box,
-                    ui_->sound_output_channel_combo_box,
-                    ui_->sound_output_combo_box->currentIndex(), true);
-                ui_->sound_output_channel_combo_box->setCurrentIndex(
-                    next_audio_output_channel_);
+            load_audio_devices(QAudioDevice::Output,
+                               ui_->sound_output_combo_box,
+                               &next_audio_output_device_);
 
-                QGuiApplication::restoreOverrideCursor();
-            });
+            update_audio_channels(ui_->sound_output_combo_box,
+                                  ui_->sound_output_channel_combo_box,
+                                  ui_->sound_output_combo_box->currentIndex(),
+                                  true);
+
+            ui_->sound_output_channel_combo_box->setCurrentIndex(next_audio_output_channel_);
+
+            QGuiApplication::restoreOverrideCursor();
+        });
 
     connect(ui_->notification_sound_output_combo_box,
-            &LazyFillComboBox::about_to_show_popup, [this]() {
-                QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
+        &LazyFillComboBox::about_to_show_popup, [this]() {
+            QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
 
-                load_audio_devices(QAudioDevice::Output,
-                                   ui_->notification_sound_output_combo_box,
-                                   &next_notification_audio_output_device_);
+            load_audio_devices(QAudioDevice::Output,
+                               ui_->notification_sound_output_combo_box,
+                               &next_notification_audio_output_device_);
 
-                QGuiApplication::restoreOverrideCursor();
-            });
+            QGuiApplication::restoreOverrideCursor();
+        });
+
+    connect(ui_->run_diagnostics_button, &QPushButton::clicked, [this]() {
+        run_diagnostics();
+    });
+
+    connect(ui_->copy_diagnostics_button, &QPushButton::clicked, [this]() {
+        const auto text = ui_->diagnostics_text->toPlainText();
+        QGuiApplication::clipboard()->setText(text);
+    });
+
+    QFont f = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    f.setPointSizeF(f.pointSizeF() * 0.95);
+    ui_->diagnostics_text->setFont(f);
 
     //
     // validation
@@ -2322,50 +2387,108 @@ void Configuration::impl::read_settings() {
     settings_->endGroup();
 }
 
-void Configuration::impl::find_audio_devices() {
-    // Retrieve audio input device.
+void Configuration::impl::find_audio_devices()
+{
+    // Default true: let's give users access to all available inputs
+    // Later we can add a checkbox to the UI to toggle this if it bothers people
+    const bool allow_monitor_inputs =
+        settings_->value("AllowMonitorInputs", false).toBool();
 
-    if (auto const saved_name = settings_->value("SoundInName").toString();
-        saved_name != next_audio_input_device_.description() ||
-        next_audio_input_device_.isNull()) {
-        next_audio_input_device_ = find_audio_device(
-            QAudioDevice::Input, ui_->sound_input_combo_box, saved_name);
-        next_audio_input_channel_ = AudioDevice::fromString(
-            settings_->value("AudioInputChannel", "Mono").toString());
+    // INPUT
+    {
+        AudioBinding b;
+        b.mode = QAudioDevice::Input;
+        b.device_combo = ui_->sound_input_combo_box;
+        b.channel_combo = ui_->sound_input_channel_combo_box;
+        b.allow_both = false;
+        b.allow_monitor_inputs = allow_monitor_inputs;
+        b.key_id = "SoundInId";
+        b.key_name = "SoundInName";
+        b.key_channel = "AudioInputChannel";
 
-        update_audio_channels(
-            ui_->sound_input_combo_box, ui_->sound_input_channel_combo_box,
-            ui_->sound_input_combo_box->currentIndex(), false);
-        ui_->sound_input_channel_combo_box->setCurrentIndex(
-            next_audio_input_channel_);
+        resolve_audio_binding(b, next_audio_input_device_, &next_audio_input_channel_);
     }
 
-    // Retrieve audio output device.
+    // OUTPUT
+    {
+        AudioBinding b;
+        b.mode = QAudioDevice::Output;
+        b.device_combo = ui_->sound_output_combo_box;
+        b.channel_combo = ui_->sound_output_channel_combo_box;
+        b.allow_both = true;
+        b.allow_monitor_inputs = true; // irrelevant for outputs
+        b.key_id = "SoundOutId";
+        b.key_name = "SoundOutName";
+        b.key_channel = "AudioOutputChannel";
 
-    if (auto const saved_name = settings_->value("SoundOutName").toString();
-        saved_name != next_audio_output_device_.description() ||
-        next_audio_output_device_.isNull()) {
-        next_audio_output_device_ = find_audio_device(
-            QAudioDevice::Output, ui_->sound_output_combo_box, saved_name);
-        next_audio_output_channel_ = AudioDevice::fromString(
-            settings_->value("AudioOutputChannel", "Mono").toString());
-
-        update_audio_channels(
-            ui_->sound_output_combo_box, ui_->sound_output_channel_combo_box,
-            ui_->sound_output_combo_box->currentIndex(), true);
-        ui_->sound_output_channel_combo_box->setCurrentIndex(
-            next_audio_output_channel_);
+        resolve_audio_binding(b, next_audio_output_device_, &next_audio_output_channel_);
     }
 
-    // Retrieve notification audio output device.
+    // NOTIFICATION OUTPUT
+    {
+        AudioBinding b;
+        b.mode = QAudioDevice::Output;
+        b.device_combo = ui_->notification_sound_output_combo_box;
+        b.channel_combo = nullptr;
+        b.allow_both = false;
+        b.allow_monitor_inputs = true;
+        b.key_id = "NotificationSoundOutId";
+        b.key_name = "NotificationSoundOutName";
+        b.key_channel = nullptr;
 
-    if (auto const saved_name =
-            settings_->value("NotificationSoundOutName").toString();
-        saved_name != next_notification_audio_output_device_.description() ||
-        next_notification_audio_output_device_.isNull()) {
-        next_notification_audio_output_device_ = find_audio_device(
-            QAudioDevice::Output, ui_->notification_sound_output_combo_box,
-            saved_name);
+        resolve_audio_binding(b, next_notification_audio_output_device_, nullptr);
+    }
+}
+
+void Configuration::impl::resolve_audio_binding(AudioBinding const& b,
+                                                QAudioDevice& next_device,
+                                                AudioDevice::Channel* next_channel)
+{
+    auto set_if_changed = [&](char const* key, QVariant const& value) {
+        if (settings_->value(key) != value)
+            settings_->setValue(key, value);
+    };
+
+    auto ensure_valid_index = [](QComboBox* cb) {
+        if (!cb) return -1;
+        int idx = cb->currentIndex();
+        if (idx < 0 && cb->count() > 0) {
+            cb->setCurrentIndex(0);
+            idx = 0;
+        }
+        return idx;
+    };
+
+    const QString saved_id   = b.key_id   ? settings_->value(b.key_id).toString()   : QString{};
+    const QString saved_name = b.key_name ? settings_->value(b.key_name).toString() : QString{};
+
+    const bool need_resolve =
+        (!saved_id.isEmpty() && dev_id(next_device) != saved_id) ||
+        (saved_id.isEmpty() && next_device.isNull());
+
+    if (need_resolve) {
+        next_device = find_audio_device(b.mode,
+                                        b.device_combo,
+                                        saved_id,
+                                        saved_name,
+                                        b.allow_monitor_inputs);
+
+        if (!next_device.isNull() && b.key_id)
+            set_if_changed(b.key_id, next_device.id());
+    }
+
+    if (b.key_channel && b.channel_combo && next_channel) {
+        *next_channel = AudioDevice::fromString(
+            settings_->value(b.key_channel, "Mono").toString());
+
+        const int idx = ensure_valid_index(b.device_combo);
+        if (idx >= 0) {
+            update_audio_channels(b.device_combo,
+                                  b.channel_combo,
+                                  idx,
+                                  b.allow_both);
+        }
+        b.channel_combo->setCurrentIndex(static_cast<int>(*next_channel));
     }
 }
 
@@ -2418,18 +2541,20 @@ void Configuration::impl::write_settings() {
     settings_->setValue("PTTport", rig_params_.ptt_port);
     settings_->setValue("SaveDir", save_directory_.absolutePath());
     if (!audio_input_device_.isNull()) {
-        settings_->setValue("SoundInName", audio_input_device_.description());
-        settings_->setValue("AudioInputChannel",
-                            AudioDevice::toString(audio_input_channel_));
+        settings_->setValue("SoundInId", audio_input_device_.id());
+        settings_->setValue("SoundInName", audio_input_device_.description()); // legacy/migration hint
+        settings_->setValue("AudioInputChannel", AudioDevice::toString(audio_input_channel_));
     }
+
     if (!audio_output_device_.isNull()) {
-        settings_->setValue("SoundOutName", audio_output_device_.description());
-        settings_->setValue("AudioOutputChannel",
-                            AudioDevice::toString(audio_output_channel_));
+        settings_->setValue("SoundOutId", audio_output_device_.id());
+        settings_->setValue("SoundOutName", audio_output_device_.description()); // legacy/migration hint
+        settings_->setValue("AudioOutputChannel", AudioDevice::toString(audio_output_channel_));
     }
+
     if (!notification_audio_output_device_.isNull()) {
-        settings_->setValue("NotificationSoundOutName",
-                            notification_audio_output_device_.description());
+        settings_->setValue("NotificationSoundOutId", notification_audio_output_device_.id());
+        settings_->setValue("NotificationSoundOutName", notification_audio_output_device_.description()); // legacy/migration hint
     }
     settings_->setValue("TransmitDirected", transmit_directed_);
     settings_->setValue("AutoreplyOnAtStartup", autoreply_on_at_startup_);
@@ -2981,23 +3106,28 @@ void Configuration::impl::accept() {
     rig_is_dummy_ =
         TransceiverFactory::basic_transceiver_name_ == rig_params_.rig_name;
 
-    if (auto const &selected_device =
+    {
+        auto const selected_device =
             ui_->sound_input_combo_box->currentData().value<QAudioDevice>();
-        selected_device != next_audio_input_device_) {
-        next_audio_input_device_ = selected_device;
+        if (dev_id(selected_device) != dev_id(next_audio_input_device_)) {
+            next_audio_input_device_ = selected_device;
+        }
     }
 
-    if (auto const &selected_device =
+    {
+        auto const selected_device =
             ui_->sound_output_combo_box->currentData().value<QAudioDevice>();
-        selected_device != next_audio_output_device_) {
-        next_audio_output_device_ = selected_device;
+        if (dev_id(selected_device) != dev_id(next_audio_output_device_)) {
+            next_audio_output_device_ = selected_device;
+        }
     }
 
-    if (auto const &selected_device =
-            ui_->notification_sound_output_combo_box->currentData()
-                .value<QAudioDevice>();
-        selected_device != next_notification_audio_output_device_) {
-        next_notification_audio_output_device_ = selected_device;
+    {
+        auto const selected_device =
+            ui_->notification_sound_output_combo_box->currentData().value<QAudioDevice>();
+        if (dev_id(selected_device) != dev_id(next_notification_audio_output_device_)) {
+            next_notification_audio_output_device_ = selected_device;
+        }
     }
 
     if (auto const selected_channel = static_cast<AudioDevice::Channel>(
@@ -4235,31 +4365,77 @@ void Configuration::impl::close_rig() {
 // populate into the selection combo box with any devices we find in
 // the search
 
-QAudioDevice
-Configuration::impl::find_audio_device(QAudioDevice::Mode const mode,
-                                       QComboBox *const combo_box,
-                                       QString const &device_name) {
-    if (device_name.size()) {
-        Q_EMIT self_->enumerating_audio_devices();
+QAudioDevice Configuration::impl::find_audio_device(QAudioDevice::Mode const mode,
+                                                   QComboBox *const combo_box,
+                                                   QString const &saved_id,
+                                                   QString const &saved_name,
+                                                   bool const allow_monitors)
+{
+    Q_EMIT self_->enumerating_audio_devices();
 
-        auto const &devices = mode == QAudioDevice::Input
-                                  ? QMediaDevices::audioInputs()
-                                  : QMediaDevices::audioOutputs();
+    auto const &devices = (mode == QAudioDevice::Input)
+                              ? QMediaDevices::audioInputs()
+                              : QMediaDevices::audioOutputs();
 
+    // ---- 1) Exact ID match (preferred, stable, no collisions)
+    if (!saved_id.isEmpty()) {
         for (auto const &p : devices) {
-            if (p.mode() == mode && p.description() == device_name) {
-                combo_box->insertItem(0, p.description(),
-                                      QVariant::fromValue(p));
+            if (p.id() == saved_id) {
+                combo_box->insertItem(0, p.description(), QVariant::fromValue(p));
                 combo_box->setCurrentIndex(0);
                 return p;
             }
         }
+    }
 
-        // Insert a place holder for the not found device.
+    // ---- 2) Legacy: match by description, but choose deterministically
+    if (!saved_name.isEmpty()) {
+        QList<QAudioDevice> matches;
+        matches.reserve(devices.size());
 
+        for (auto const &p : devices) {
+            if (p.description() != saved_name)
+                continue;
+
+#ifdef Q_OS_LINUX
+            if (!allow_monitors && is_monitor(p))
+                continue;
+#endif
+            matches.push_back(p);
+        }
+
+        auto best = QAudioDevice{};
+        int bestScore = std::numeric_limits<int>::min();
+
+        for (auto const &p : matches) {
+            int score = 0;
+
+#ifdef Q_OS_LINUX
+            if (is_monitor(p)) score -= 1000;          // only reachable if allow_monitors==true
+            if (looks_like_capture(p)) score += 200;   // for Input restores
+#endif
+            // Soft hint: don't gate on mode, just prefer it when truthful
+            if (p.mode() == mode) score += 10;
+            else score -= 10;
+
+            // Prefer stable-looking IDs over empty/odd ones
+            if (!p.id().isEmpty()) score += 1;
+
+            if (score > bestScore) {
+                bestScore = score;
+                best = p;
+            }
+        }
+
+        if (!best.isNull()) {
+            combo_box->insertItem(0, best.description(), QVariant::fromValue(best));
+            combo_box->setCurrentIndex(0);
+            return best;
+        }
+
+        // Not found (or filtered out as monitor)
         combo_box->insertItem(0,
-                              device_name + " (" +
-                                  tr("Not found", "audio device missing") + ")",
+                              saved_name + " (" + tr("Not found", "audio device missing") + ")",
                               QVariant::fromValue(QAudioDevice{}));
         combo_box->setCurrentIndex(0);
     }
@@ -4273,17 +4449,37 @@ Configuration::impl::find_audio_device(QAudioDevice::Mode const mode,
 
 void Configuration::impl::load_audio_devices(QAudioDevice::Mode const mode,
                                              QComboBox *combo_box,
-                                             QAudioDevice *device) {
+                                             QAudioDevice *device,
+                                             bool const show_monitors)
+{
     combo_box->clear();
-
     Q_EMIT self_->enumerating_audio_devices();
+
     int current_index = -1;
 
-    auto const &devices = mode == QAudioDevice::Input
+    auto const &devices = (mode == QAudioDevice::Input)
                               ? QMediaDevices::audioInputs()
                               : QMediaDevices::audioOutputs();
 
+    // Count duplicate descriptions
+    QHash<QString, int> descCounts;
+    descCounts.reserve(devices.size());
     for (auto const &p : devices) {
+#ifdef Q_OS_LINUX
+        if (mode == QAudioDevice::Input && !show_monitors && is_monitor(p))
+            continue;
+#endif
+        descCounts[p.description()] += 1;
+    }
+
+    auto const wanted_id = (device && !device->isNull()) ? device->id() : QString{};
+
+    for (auto const &p : devices) {
+#ifdef Q_OS_LINUX
+        if (mode == QAudioDevice::Input && !show_monitors && is_monitor(p))
+            continue;
+#endif
+
         qCDebug(configuration_js8)
             << "Configuration::impl::load_audio_devices" << Qt::endl
             << "                      id:" << p.id() << Qt::endl
@@ -4298,18 +4494,27 @@ void Configuration::impl::load_audio_devices(QAudioDevice::Mode const mode,
         auto const formats = p.supportedSampleFormats();
 
         // Filter out devices that do not support PCM sample formats.
-
-        if (std::any_of(formats.begin(), formats.end(), [](auto const format) {
+        if (!std::any_of(formats.begin(), formats.end(), [](auto const format) {
                 return (format == QAudioFormat::SampleFormat::Int16 ||
                         format == QAudioFormat::SampleFormat::Int32 ||
                         format == QAudioFormat::SampleFormat::Float);
             })) {
-            combo_box->addItem(p.description(), QVariant::fromValue(p));
-
-            if (p == *device) {
-                current_index = combo_box->count() - 1;
-            }
+            continue;
         }
+
+        auto const base = p.description();
+        auto const label = make_label(base, p, descCounts.value(base, 1));
+
+        combo_box->addItem(label, QVariant::fromValue(p));
+
+        if (!wanted_id.isEmpty() && p.id() == wanted_id) {
+            current_index = combo_box->count() - 1;
+        }
+    }
+
+    // Make the UX smoother by picking a fallback
+    if (current_index < 0 && combo_box->count() > 0) {
+        current_index = 0;
     }
 
     combo_box->setCurrentIndex(current_index);
@@ -4329,17 +4534,39 @@ void Configuration::impl::load_audio_devices(QAudioDevice::Mode const mode,
 //   but it's at least stereo.
 
 void Configuration::impl::update_audio_channels(
-    QComboBox const *const source_combo_box, QComboBox const *combo_box,
-    int const index, bool const allow_both) {
-    auto const config = source_combo_box->itemData(index)
-                            .value<QAudioDevice>()
-                            .channelConfiguration();
-    auto const usable = config != QAudioFormat::ChannelConfigUnknown;
-    auto const mono = usable && config == QAudioFormat::ChannelConfigMono;
-    auto const stereo = usable && config != QAudioFormat::ChannelConfigMono;
-    auto model = dynamic_cast<QStandardItemModel *>(combo_box->model());
+    QComboBox const *const source_combo_box,
+    QComboBox const *combo_box,
+    int const index,
+    bool const allow_both)
+{
+    auto dev = source_combo_box->itemData(index).value<QAudioDevice>();
 
-    model->item(AudioDevice::Mono)->setEnabled(mono);
+    int ch = 0;
+    if (!dev.isNull())
+        ch = dev.preferredFormat().channelCount();
+
+    const auto cfg = dev.channelConfiguration();
+
+    bool usable = false;
+    bool mono = false;
+    bool stereo = false;
+
+    if (ch > 0) {
+        usable = true;
+        mono = (ch == 1);
+        stereo = (ch >= 2);
+    } else {
+        // fallback for platforms/backends where preferredFormat isn't informative
+        usable = (cfg != QAudioFormat::ChannelConfigUnknown);
+        mono = usable && (cfg == QAudioFormat::ChannelConfigMono);
+        stereo = usable && (cfg != QAudioFormat::ChannelConfigMono);
+    }
+
+    auto model = qobject_cast<QStandardItemModel *>(combo_box->model());
+    if (!model) return;
+
+    // If unknown, leaving Mono enabled avoids "everything disabled" UX.
+    model->item(AudioDevice::Mono)->setEnabled(mono || !usable);
     model->item(AudioDevice::Left)->setEnabled(stereo);
     model->item(AudioDevice::Right)->setEnabled(stereo);
     model->item(AudioDevice::Both)->setEnabled(stereo && allow_both);
@@ -4493,6 +4720,249 @@ QStringList Configuration::impl::get_selected_network_interfaces(
         }
     }
     return interfaces;
+}
+
+inline QString Configuration::impl::dev_id(QAudioDevice const& d) {
+    return d.isNull() ? QString{} : d.id();
+}
+
+inline bool Configuration::impl::is_monitor(QAudioDevice const& d) {
+#ifdef Q_OS_LINUX
+    return !d.isNull() && d.id().endsWith(".monitor");
+#else
+    Q_UNUSED(d);
+    return false;
+#endif
+}
+
+inline bool Configuration::impl::looks_like_capture(QAudioDevice const& d) {
+#ifdef Q_OS_LINUX
+    if (d.isNull()) return false;
+    const auto id = d.id();
+    return id.startsWith("alsa_input.") ||
+           id.startsWith("bluez_input.") ||
+           id.startsWith("pipewire_input.") ||
+           id.startsWith("jack_input.");
+#else
+    Q_UNUSED(d);
+    return false;
+#endif
+}
+
+// tail after last '.' is usually short: analog-stereo / iec958-stereo / monitor
+inline QString Configuration::impl::id_tail(QAudioDevice const& d) {
+    if (d.isNull()) return {};
+    auto const parts = d.id().split('.');
+    return parts.isEmpty() ? d.id() : parts.last();
+}
+
+inline QString Configuration::impl::make_label(QString const& base, QAudioDevice const& d, int dupCount) {
+    if (dupCount <= 1)
+        return base;
+
+#ifdef Q_OS_LINUX
+    if (is_monitor(d))
+        return base + " (Monitor)";
+#endif
+
+    auto tail = id_tail(d);
+    if (!tail.isEmpty())
+        return base + " (" + tail + ")";
+
+    return base;
+}
+
+void Configuration::impl::run_diagnostics()
+{
+    ui_->run_diagnostics_button->setEnabled(false);
+    ui_->copy_diagnostics_button->setEnabled(false);
+    QGuiApplication::setOverrideCursor(QCursor{Qt::WaitCursor});
+
+    const auto text = build_diagnostics_text();
+    ui_->diagnostics_text->setPlainText(text);
+    ui_->diagnostics_text->moveCursor(QTextCursor::Start);
+
+    QGuiApplication::restoreOverrideCursor();
+    ui_->run_diagnostics_button->setEnabled(true);
+    ui_->copy_diagnostics_button->setEnabled(true);
+}
+
+QString Configuration::impl::build_diagnostics_text() const
+{
+    QString s;
+    QTextStream ts(&s);
+
+    ts << "JS8Call Diagnostics\n";
+    ts << "Timestamp: " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n\n";
+
+    ts << "Application\n";
+    ts << "  App name:     " << QCoreApplication::applicationName() << "\n";
+    ts << "  Org name:     " << QCoreApplication::organizationName() << "\n";
+    ts << "  Org domain:   " << QCoreApplication::organizationDomain() << "\n";
+    ts << "  Config file:  " << settings_->fileName() << "\n";
+    ts << "  Config dir:   " << QFileInfo(settings_->fileName()).absolutePath() << "\n";
+    ts << "  Data directory:    " << writeable_data_dir_.absolutePath() << "\n\n";
+
+    ts << "System\n";
+    ts << "  Qt:           " << qVersion() << "\n";
+    ts << "  OS:           " << QSysInfo::prettyProductName() << "\n";
+    ts << "  Kernel:       " << QSysInfo::kernelType() << " " << QSysInfo::kernelVersion() << "\n";
+    ts << "  CPU arch:     " << QSysInfo::currentCpuArchitecture() << "\n";
+    ts << "  AppImage:     " << qEnvironmentVariable("APPIMAGE") << "\n\n";
+
+    ts << "Qt Plugin Paths\n";
+    ts << "  PluginsPath:  " << QLibraryInfo::path(QLibraryInfo::PluginsPath) << "\n";
+    ts << "  LibraryPath:  " << QLibraryInfo::path(QLibraryInfo::LibrariesPath) << "\n";
+    ts << "  BinariesPath: " << QLibraryInfo::path(QLibraryInfo::BinariesPath) << "\n\n";
+
+    ts << "Qt Runtime Plugin Search Paths\n";
+    for (auto const& p : QCoreApplication::libraryPaths()) {
+        ts << "  " << p << "\n";
+    }
+    ts << "\n";
+
+    ts << "Environment\n";
+    ts << "  Qt / Cross-platform\n";
+    append_env(ts, "QT_PLUGIN_PATH");
+    append_env(ts, "QT_QPA_PLATFORM_PLUGIN_PATH");
+    append_env(ts, "QT_QPA_PLATFORM");
+    append_env(ts, "QT_DEBUG_PLUGINS");
+    append_env(ts, "QT_LOGGING_RULES");
+    append_env(ts, "QT_AUDIO_BACKEND");
+    ts << "\n";
+
+#ifdef Q_OS_LINUX
+    ts << "  Linux Audio\n";
+    append_env(ts, "PIPEWIRE_REMOTE");
+    append_env(ts, "PULSE_SERVER");
+    append_env(ts, "XDG_RUNTIME_DIR");
+#endif
+
+#ifdef Q_OS_WIN
+    ts << "  Windows\n";
+    append_env(ts, "PATH");
+#endif
+
+    ts << "\n";
+
+    auto const defaultIn = QMediaDevices::defaultAudioInput();
+    auto const defaultOut = QMediaDevices::defaultAudioOutput();
+
+    ts << "Qt Defaults\n";
+    ts << "  Default input:  "
+       << (defaultIn.isNull() ? "<none>" : defaultIn.description() + " | " + defaultIn.id()) << "\n";
+    ts << "  Default output: "
+       << (defaultOut.isNull() ? "<none>" : defaultOut.description() + " | " + defaultOut.id()) << "\n\n";
+
+    auto selected = [](QComboBox* cb) -> QAudioDevice {
+        return cb ? cb->currentData().value<QAudioDevice>() : QAudioDevice{};
+    };
+
+    auto selIn  = selected(ui_->sound_input_combo_box);
+    auto selOut = selected(ui_->sound_output_combo_box);
+    auto selNtf = selected(ui_->notification_sound_output_combo_box);
+
+    ts << "Selected (from dialog)\n";
+    ts << "  Input:        " << (selIn.isNull()  ? "<none>" : (selIn.description()  + " | " + selIn.id())) << "\n";
+    ts << "  Output:       " << (selOut.isNull() ? "<none>" : (selOut.description() + " | " + selOut.id())) << "\n";
+    ts << "  Notification: " << (selNtf.isNull() ? "<none>" : (selNtf.description() + " | " + selNtf.id())) << "\n\n";
+
+    ts << dump_devices("QMediaDevices::audioInputs()", QMediaDevices::audioInputs());
+    ts << dump_devices("QMediaDevices::audioOutputs()", QMediaDevices::audioOutputs());
+
+#if defined(Q_OS_LINUX)
+    ts << "System Audio (best effort)\n\n";
+    ts << "pactl list sources short:\n";
+    ts << run_cmd("pactl", {"list", "sources", "short"}, 1200) << "\n";
+
+    ts << "pactl list sinks short:\n";
+    ts << run_cmd("pactl", {"list", "sinks", "short"}, 1200) << "\n";
+
+    ts << "wpctl status:\n";
+    ts << run_cmd("wpctl", {"status"}, 1500) << "\n";
+
+    ts << "pactl info:\n";
+    ts << run_cmd("pactl", {"info"}, 1200) << "\n";
+
+
+#elif defined(Q_OS_WIN)
+    ts << "Windows Audio (best effort)\n\n";
+
+    ts << "PowerShell Win32_SoundDevice:\n";
+    ts << run_cmd("powershell",
+                  {"-NoProfile", "-Command",
+                   "Get-CimInstance Win32_SoundDevice | Format-List Name,Manufacturer,Status,PNPDeviceID"},
+                  2500) << "\n";
+
+    ts << "PowerShell AudioEndpoint:\n";
+    ts << run_cmd("powershell",
+                  {"-NoProfile", "-Command",
+                   "Get-PnpDevice -Class AudioEndpoint | Format-List FriendlyName,Status,InstanceId"},
+                  2500) << "\n";
+#endif
+
+    ts << "Hints\n";
+    ts << "  - If your system shows a device but QMediaDevices does not, suspect QtMultimedia backend/plugin mismatch.\n";
+#ifdef Q_OS_LINUX
+    ts << "  - Try launching with QT_AUDIO_BACKEND=pulseaudio.\n";
+#endif
+    ts << "  - If QT_DEBUG_PLUGINS=1 is set before launch, plugin load failures will print to stderr.\n";
+
+    return s;
+}
+
+QString Configuration::impl::run_cmd(QString const& program,
+                       QStringList const& args,
+                       int timeout_ms = 1200)
+{
+    QProcess p;
+    p.setProgram(program);
+    p.setArguments(args);
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start();
+
+    if (!p.waitForStarted(200))
+        return QString("[failed to start: %1]\n").arg(program);
+
+    if (!p.waitForFinished(timeout_ms)) {
+        p.kill();
+        p.waitForFinished(200);
+        return QString("[timeout after %1ms: %2]\n").arg(timeout_ms).arg(program);
+    }
+
+    const auto out = QString::fromLocal8Bit(p.readAll());
+    return out.isEmpty() ? QString("[no output: %1]\n").arg(program) : out;
+}
+
+void Configuration::impl::append_env(QTextStream& ts, char const* key)
+{
+    const auto v = qEnvironmentVariable(key);
+    ts << "     " << key << "=" << (v.isEmpty() ? "<unset>" : v) << "\n";
+}
+
+QString Configuration::impl::dump_devices(QString const& title,
+                            QList<QAudioDevice> const& devices)
+{
+    QString s;
+    QTextStream ts(&s);
+
+    ts << title << " (" << devices.size() << ")\n";
+    for (auto const& d : devices) {
+        ts << "  - description: " << d.description() << "\n";
+        ts << "    id:          " << d.id() << "\n";
+        ts << "    mode:        " << int(d.mode()) << "\n";
+        ts << "    chConfig:    " << int(d.channelConfiguration()) << "\n";
+        ts << "    prefFmt:     "
+           << d.preferredFormat().sampleRate() << " Hz, "
+           << d.preferredFormat().channelCount() << " ch, "
+           << int(d.preferredFormat().sampleFormat()) << "\n";
+        ts << "    formats:     ";
+        for (auto const f : d.supportedSampleFormats())
+            ts << int(f) << " ";
+        ts << "\n";
+    }
+    ts << "\n";
+    return s;
 }
 
 #if !defined(QT_NO_DEBUG_STREAM)
