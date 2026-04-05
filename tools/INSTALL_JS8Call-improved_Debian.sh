@@ -50,6 +50,8 @@ if [ -e ${HOME}/.local/bin/JS8* ]; then
     rm ~/.local/bin/JS8*
     echo "removing Qt 6.9.3....."
     rm -rf ~/.local/lib/Qt
+    echo "removing libraries....."
+    rm -rf ~/.local/lib/js8lib
     echo "removing JS8Call.desktop......"
     rm ~/.local/share/applications/JS8*.desktop
     echo "removing JS8Call icon......"
@@ -140,14 +142,8 @@ fi
 clear
 echo "installing build dependencies....."
 sudo apt-get update && sudo apt-get install -y build-essential file wget git cmake \
-   libhamlib-dev libvulkan-dev\
-   mesa-utils libglu1-mesa-dev freeglut3-dev mesa-common-dev \
-   libusb-1.0-0-dev libudev-dev libxkbcommon-dev \
-   libfftw3-dev libxcb-cursor0
-# If multiple versions of Boost, install oldest first, if newer is available, it will replace
-sudo apt-get install -y libboost1.81-dev
-sudo apt-get install -y libboost1.83-dev
-sudo apt-get install -y libboost1.88-dev
+   mesa-utils libglu1-mesa-dev freeglut3-dev mesa-common-dev libvulkan-dev\
+   libxkbcommon-dev libxcb-cursor0
 
 if [ ! -d $HOME/development ]; then
   mkdir $HOME/development
@@ -175,8 +171,10 @@ if [ ! -d $HOME/.local/lib/Qt ]; then
   mkdir ~/.local/lib
   if [ "${ARCH}" = "aarch64" ]; then
     wget https://github.com/JS8Call-improved/js8lib/releases/download/lib%2F3.0/Qt6.9.3_Linux_aarch64.tar.gz
+    wget https://github.com/JS8Call-improved/js8lib/releases/download/lib%2F3.0/js8lib3.0-Linux_aarch64.tar.gz
   else
     wget https://github.com/JS8Call-improved/js8lib/releases/download/lib%2F3.0/Qt6.9.3_Linux_x86_64.tar.gz
+    wget https://github.com/JS8Call-improved/js8lib/releases/download/lib%2F3.0/js8lib3.0-Linux_x86_64.tar.gz
   fi
 else
   echo "~/.local/lib/Qt already exists......"
@@ -210,12 +208,17 @@ if [ ! -d ~/.local/lib/Qt ]; then
   user_dialog
   sleep 3
   if [ "${ARCH}" = "aarch64" ]; then
-    sudo tar -xzvf Qt6.9.3_Linux_aarch64.tar.gz -C ~/.local/lib/
+    tar -xzvf Qt6.9.3_Linux_aarch64.tar.gz -C ~/.local/lib/
     mv Qt6.9.3_Linux_aarch64.tar.gz ~/Downloads
-    echo "Qt 6.9.3 archive has been moved to your Downloads folder"
+    tar -xzvf js8lib3.0-Linux_aarch64.tar.gz -C ~/.local/lib/
+    mv js8lib3.0-Linux_aarch64.tar.gz ~/Downloads
+    echo "Qt 6.9.3  and library archives have been moved to your Downloads folder"
   else
-    sudo tar -xzvf Qt6.9.3_Linux_x86_64.tar.gz -C ~/.local/lib/
-    echo "Qt 6.9.3 archive has been moved to your Downloads folder"
+    tar -xzvf Qt6.9.3_Linux_x86_64.tar.gz -C ~/.local/lib/
+    mv Qt6.9.3_Linux_x86_64.tar.gz ~/Downloads
+    tar -xzvf js8lib3.0-Linux_x86_64.tar.gz -C ~/.local/lib/
+    mv js8lib3.0-Linux_x86_64.tar.gz ~/Downloads
+    echo "Qt 6.9.3  and library archives have been moved to your Downloads folder"
   fi
 else
   echo "skipping installation of Qt6 - directory already exists...."
@@ -239,7 +242,7 @@ rm -rf ~/development/JS8Call-improved/build
 
 mkdir build
 cd build
-cmake -DCMAKE_PREFIX_PATH=~/.local/lib/Qt ..
+cmake -DCMAKE_PREFIX_PATH="~/.local/lib/Qt;~/.local/lib/js8lib/" ..
 cmake --build .
 
 # install application for local user and create menu entry
