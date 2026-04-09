@@ -1389,25 +1389,26 @@ void UI_Constructor::createStatusBar() // createStatusBar
 {
     tx_status_label.setAlignment(Qt::AlignCenter);
     tx_status_label.setMinimumSize(QSize{150, 18});
-    tx_status_label.setStyleSheet("QLabel{background-color: #22ff22}");
+    tx_status_label.setStyleSheet("QLabel{background-color: #22ff22; color: #000000}");
     tx_status_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     statusBar()->addWidget(&tx_status_label);
 
     last_tx_label.setAlignment(Qt::AlignCenter);
     last_tx_label.setMinimumSize(QSize{150, 18});
-    last_tx_label.setStyleSheet("QLabel{background-color: #6699ff}");
+    last_tx_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     last_tx_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     statusBar()->addWidget(&last_tx_label);
 
     config_label.setAlignment(Qt::AlignCenter);
     config_label.setMinimumSize(QSize{80, 18});
+    config_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     config_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     statusBar()->addWidget(&config_label);
     config_label.hide(); // only shown for non-default configuration
 
     mode_label.setAlignment(Qt::AlignCenter);
     mode_label.setMinimumSize(QSize{80, 18});
-    mode_label.setStyleSheet("QLabel{background-color: #6699ff}");
+    mode_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     mode_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     {
         QString modeLabelText;
@@ -1437,14 +1438,14 @@ void UI_Constructor::createStatusBar() // createStatusBar
 
     frequency_label.setAlignment(Qt::AlignCenter);
     frequency_label.setMinimumSize(QSize{110, 18});
-    frequency_label.setStyleSheet("QLabel{background-color: #6699ff}");
+    frequency_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     frequency_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     frequency_label.setText(QString("Freq: %1").arg(Radio::pretty_frequency_MHz_string(dialFrequency() + freq())));
     statusBar()->addWidget(&frequency_label);
     
     auto_reply_label.setAlignment(Qt::AlignCenter);
     auto_reply_label.setMinimumSize(QSize{110, 18});
-    auto_reply_label.setStyleSheet("QLabel{background-color: #6699ff}");
+    auto_reply_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     auto_reply_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     QString autoReplyState = ui->actionModeAutoreply->isChecked() ? "On" : "Off";
     statusBar()->addWidget(&auto_reply_label);
@@ -1461,7 +1462,7 @@ void UI_Constructor::createStatusBar() // createStatusBar
 
     statusBar()->addPermanentWidget(&wpm_label);
     wpm_label.setMinimumSize(QSize{120, 18});
-    wpm_label.setStyleSheet("QLabel{background-color: #6699ff}");
+    wpm_label.setStyleSheet("QLabel{background-color: #6699ff; color: #000000}");
     wpm_label.setFrameStyle(QFrame::Panel | QFrame::Sunken);
     wpm_label.setAlignment(Qt::AlignCenter);
 }
@@ -2751,7 +2752,7 @@ void UI_Constructor::guiUpdate() {
                 tx_status_label.setText("Idle timeout");
             } else {
                 tx_status_label.setStyleSheet(
-                    "QLabel{background-color: #22ff22}");
+                    "QLabel{background-color: #22ff22; color: #000}");
                 tx_status_label.setText(m_decoderBusy ? "Decoding"
                                                       : "Receiving");
             }
