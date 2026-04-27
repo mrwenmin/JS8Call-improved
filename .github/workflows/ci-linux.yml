@@ -233,7 +233,7 @@ jobs:
         curl --location --output /tmp/hamlib-4.7.1.tar.gz https://github.com/Hamlib/Hamlib/releases/download/4.7.1/hamlib-4.7.1.tar.gz
         cd /tmp
         tar zxf hamlib-4.7.1.tar.gz
-        cd /tmp/hamlib/hamlib-4.7.1/
+        cd /tmp/hamlib-4.7.1/
         ./configure --prefix=${GITHUB_WORKSPACE}/local/hamlib --no-create --no-recursion CFLAGS="-g -O0 -fPIC"
         ./config.status
         make -j
