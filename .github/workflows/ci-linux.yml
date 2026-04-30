@@ -118,19 +118,29 @@ jobs:
         key: ${{ runner.os }}-${{ steps.which-os.outputs.thisos }}-${{ runner.arch }}-wayland-qt693
 # End cache checks
 
-# We have to empty the runners to build QT as they are only 50G and upto 78% full
-# This does NOT work with container builds
-    - name: Free Disk Space (Ubuntu)
+    - name: Clean up runner
       if: steps.cache-qt.outputs.cache-hit != 'true' && steps.which-os.outputs.thisos == 'ubuntu22.04'
-      uses: jlumbroso/free-disk-space@main
-      with:
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
+      run: |
+        df -h
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/local/.ghcup || true
+        sudo apt-get remove -y '^aspnetcore-.*' || echo "::warning::The command [sudo apt-get remove -y '^aspnetcore-.*'] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y '^dotnet-.*' --fix-missing || echo "::warning::The command [sudo apt-get remove -y '^dotnet-.*' --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y '^llvm-.*' --fix-missing || echo "::warning::The command [sudo apt-get remove -y '^llvm-.*' --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y 'php.*' --fix-missing || echo "::warning::The command [sudo apt-get remove -y 'php.*' --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y '^mongodb-.*' --fix-missing || echo "::warning::The command [sudo apt-get remove -y '^mongodb-.*' --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y '^mysql-.*' --fix-missing || echo "::warning::The command [sudo apt-get remove -y '^mysql-.*' --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri --fix-missing || echo "::warning::The command [sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y google-cloud-sdk --fix-missing || echo "::debug::The command [sudo apt-get remove -y google-cloud-sdk --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get remove -y google-cloud-cli --fix-missing || echo "::debug::The command [sudo apt-get remove -y google-cloud-cli --fix-missing] failed to complete successfully. Proceeding..."
+        sudo apt-get autoremove -y || echo "::warning::The command [sudo apt-get autoremove -y] failed to complete successfully. Proceeding..."
+        sudo apt-get clean || echo "::warning::The command [sudo apt-get clean] failed to complete successfully. Proceeding..."
+        sudo docker image prune --all --force || true
+        sudo swapoff -a || true
+        sudo rm -f /mnt/swapfile || true
+        df -h
+        free -h
 
     - name: Install minimum required dependencies (Ubuntu)
       if: ${{ steps.which-os.outputs.thisos == 'ubuntu22.04' }}
@@ -214,18 +224,6 @@ jobs:
       with:
         key: ${{ runner.os }}-${{ steps.which-os.outputs.thisos }}-${{ runner.arch }}-ffmpeg713
         path: /home/runner/work/JS8Call-improved/JS8Call-improved/local/ffmpeg
-
-## Hamlib official release
-#    - name: Build/Install Hamlib 4.7.0
-#      if: steps.cache-hamlib.outputs.cache-hit != 'true'
-#      id: install-hamlib
-#      uses: robinraju/release-downloader@v1.12
-#      with:
-#        repository: 'hamlib/hamlib'
-#        fileName: 'hamlib-4.7.0.tar.gz '
-#        tag: '4.7.0'
-#        extract: true
-#        out-file-path: /tmp/hamlib
 
     - name: Build Hamlib 4.7.1 with debug flags
       if: steps.cache-hamlib.outputs.cache-hit != 'true'
@@ -448,9 +446,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Generate sha 256 hash
+      run: shasum -a 256 ./AppImage/js8call-improved*.tar.gz > ./AppImage/sha256hash
+      
     - name: Attestation (Release Only)
       if: ${{ (inputs.environment == 'Release') && (inputs.release-ver) }}
-      uses: actions/attest-build-provenance@v3
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
       with:
         subject-path: '${{ github.workspace }}/AppImage/*.AppImage*'
 
