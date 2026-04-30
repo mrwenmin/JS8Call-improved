@@ -1,5 +1,5 @@
 #define MyAppName "JS8Call"
-#define MyAppVersion "2.5.0"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "JS8Call-improved"
 #define MyAppURL "https://www.js8call-improved.com/"
 #define MyAppExeName "JS8Call.exe"
