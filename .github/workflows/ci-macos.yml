@@ -4,6 +4,7 @@ permissions:
   id-token: write
   
 name: CI Build for MacOS 26 Arm64 (M1 and higher)
+run-name: ${{ (github.event.inputs.environment) || (github.event.pull_request.title) || 'CI' }} Build for MacOS M1
 
 on: 
   workflow_dispatch: 
@@ -16,10 +17,10 @@ on:
         type: string
         default: 'Release'
       release-ver:
-        description: 'Release Version (v2.5.0)'
+        description: 'Release Version (v3.0.0)'
         required: false
         type: string      
-        default: 'v2.5.0'
+        default: 'v3.0.0'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -61,20 +62,20 @@ jobs:
       
     - name: Attestation (Release Only)
       if: ${{ inputs.release-ver }}
-      uses: actions/attest-build-provenance@v3
+      uses: actions/attest-build-provenance@v4
       with:
         subject-path: '${{ github.workspace }}/JS8Call-improved.dmg'
         
     - name: Upload Artifact (Release build)
       if: ${{ inputs.release-ver }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: "JS8call-improved_${{ inputs.release-ver }}_${{ runner.arch }}_macos26.dmg"
         path: /Users/runner/work/JS8Call-improved/JS8Call-improved/JS8Call-improved.dmg
 
     - name: Upload Artifact (CI build)
       if: ${{ !inputs.release-ver }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: "JS8call-improved_devel_${{ runner.arch }}_macos26.dmg"
         path: /Users/runner/work/JS8Call-improved/JS8Call-improved/JS8Call-improved.dmg
