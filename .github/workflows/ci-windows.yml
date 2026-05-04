@@ -10,10 +10,10 @@ on:
         type: string
         default: 'Release'
       release-ver:
-        description: 'Release Version (v2.5.1)'
+        description: 'Release Version (v3.0.0)'
         required: false
         type: string
-        default: 'v2.5.1'
+        default: 'v3.0.0'
       environment:
         description: 'Environment to run in'
         type: environment
@@ -28,19 +28,22 @@ on:
         type: string
         default: 'Debug'
       release-ver:
-        description: 'Release Version (v2.5.1)'
+        description: 'Release Version (v3.0.0)'
         required: false
         type: string      
-        default: 'v2.5.1'        
+        default: 'v3.0.0'        
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
+
+# NOTE Secrets can NOT be accessed from PRs if they are NOT a branch on this repo!
+# Please try to quit forgetting that! i know who I'm talking about, you in the mirror!
 
 jobs:
   build_windows-2025:
     runs-on: windows-2025
     permissions: write-all
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'CI' }}
    
     steps:
     - run: git config --global core.autocrlf input
@@ -61,7 +64,6 @@ jobs:
           boost:p
           fftw:p
           sqlite3:p
-          nsis:p
           python:p
 
     - name: Setup build directory
@@ -78,21 +80,30 @@ jobs:
         cache: true
         dir: 'D:/a/JS8Call-improved/JS8Call-improved/local/qt693'
 
-    - name: hamlib/hamlib release 4.7.0
-      uses: robinraju/release-downloader@v1.12
+# hamlib
+    - name: Cache Check Hamlib 4.7.1
+      id: cache-hamlib
+      uses: actions/cache/restore@v5
       with:
-        repository: 'hamlib/hamlib'
-        fileName: 'hamlib-w64-4.7.0.zip'
-        tag: '4.7.0'
-        extract: true
-        out-file-path: 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib470-tmp'
+        path: 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib'
+        key: ${{ runner.os }}-${{ runner.arch }}-hamlib471
 
-    - name: Move hamlib directory to the right spot
-      shell: msys2 {0}
+    - name: Install Hamlib 4.7.1
+      if: steps.cache-hamlib.outputs.cache-hit != 'true'
       run: |
-        mv 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib470-tmp/hamlib-w64-4.7.0' 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib'
+        curl --location --output 'D:/a/_temp/hamlib-w64-4.7.1.zip' https://github.com/Hamlib/Hamlib/releases/download/4.7.1/hamlib-w64-4.7.1.zip
+        cd 'D:/a/_temp/'
+        unzip hamlib-w64-4.7.1.zip
+        mv 'D:/a/_temp/hamlib-w64-4.7.1' 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib'
         mv 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib/lib/gcc/libhamlib.dll.a' 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib/lib/libhamlib.dll.a'
-
+        
+    - name: Save Hamlib cache
+      if: steps.cache-hamlib.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        key: ${{ runner.os }}-${{ runner.arch }}-hamlib471
+        path: 'D:/a/JS8Call-improved/JS8Call-improved/local/hamlib'
+        
     - name: Configure JS8Call
       shell: msys2 {0}
       run: |
