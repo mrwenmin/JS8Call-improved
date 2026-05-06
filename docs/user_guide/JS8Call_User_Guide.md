@@ -54,7 +54,7 @@ For release announcements and discussion, join the JS8Call mailing list here: [h
 
 - **February 11, 2018** - Jordan, KN4CRD, inquired about the idea of integrating long-form messages into WSJT-X: [https://sourceforge.net/p/wsjt/mailman/message/36223372/](https://sourceforge.net/p/wsjt/mailman/message/36223372/)
 
-- **February 12, 2018** - Joe Taylor, K1JT, wrote back: [https://sourceforge.net/p/wsjt/mailman/message/36224507/](https://sourceforge.net/p/wsjt/mailman/message/36224507/) saying no and "Please don\'t let my comment discourage you from proceeding as you wish, toward something new."
+- **February 12, 2018** - Joe Taylor, K1JT, wrote back: [https://sourceforge.net/p/wsjt/mailman/message/36224507/](https://sourceforge.net/p/wsjt/mailman/message/36224507/) saying no and "Please don't let my comment discourage you from proceeding as you wish, toward something new."
 
 - **March 4, 2018** - Jordan, KN4CRD, published a design document for FT8Call: [https://github.com/jsherer/ft8call](https://github.com/jsherer/ft8call)
 
@@ -240,7 +240,7 @@ By opening the waterfall controls (View-\>Show Waterfall Controls) you can confi
 
 ### Messages
 
-The top yellow text box shows you messages that are either on the frequency offset you\'re on or who have directed a message to you (they sent a message that included your callsign).
+The top yellow text box shows you messages that are either on the frequency offset you're on or who have directed a message to you (they sent a message that included your callsign).
 
 You type into the white box on the bottom to prepare a message for transmission.
 
@@ -480,7 +480,7 @@ This interval at which the heartbeat transmits can be changed from the control m
 
 When you have AUTO replies enabled and you've selected to Send Heartbeat Acknowledgements, your station will send an ACK reply to signal to the other operator that you can hear them. These are essentially "lightweight heartbeats" from your station and will reset your heartbeat timer.
 
-The intent of heartbeat is not to report on propagation. Instead it is to help populate your call activity (the heard list on the right) so you know who\'s likely to be reachable to make contact. You can\'t work them if you can\'t "hear" them (or if they cannot hear you).
+The intent of heartbeat is not to report on propagation. Instead it is to help populate your call activity (the heard list on the right) so you know who's likely to be reachable to make contact. You can't work them if you can't "hear" them (or if they cannot hear you).
 
 Keep in mind, though, that HBs are not designed to start conversations. When you turn HB on, you're "joining" the heartbeat network. This network allows for planning of relays and sending messages to be stored at those receiving stations. Think of HBs and ACKs as a way to plot network topology and relays (\"\>\") as a way to send messages to be read later (sort of like an SMS text message) through that network.
 
@@ -1103,7 +1103,7 @@ Compound callsigns are a 50-bit encoding of 11 characters following the format:
 
 ``\[@A-Z0-9/\]\[A-Z0-9/\]\[A-Z0-9/\]\[/\]\[A-Z0-9/\]\[A-Z0-9/\]\[A-Z0-9/\]\[/\]\[A-Z0-9/\]\[A-Z0-9/\]\[A-Z0-9/\]``
 
-Since normal callsigns are 28-bits in length, and compound callsigns are 50-bits in length, and the payload size is only 75 bits, there\'s no way to transmit both in a single frame. So, when addressing a station with a compound call, the transmission is split into two frames, with any directed command included in the extra space of the second frame.
+Since normal callsigns are 28-bits in length, and compound callsigns are 50-bits in length, and the payload size is only 75 bits, there's no way to transmit both in a single frame. So, when addressing a station with a compound call, the transmission is split into two frames, with any directed command included in the extra space of the second frame.
 
 #### Callsign Prefix / Suffix
 
