@@ -5,7 +5,7 @@
 # variables
 red="\033[0;31m"
 clear="\033[0m"
-VERSION="master"
+VERSION="release/3.0.1"
 
 # functions
 user_dialog() {
